@@ -5,7 +5,8 @@ import time
 import re
 from typing import List, Optional, Dict, Any, Tuple
 from urllib.parse import urlencode
-from models import Publication, Author
+from models_db import ScrapedPublication as Publication, ScrapedAuthor as Author
+from event_date_extractor import ConferenceDateExtractor
 
 
 class CrossRefScraper:
@@ -53,10 +54,10 @@ class CrossRefScraper:
         
         while len(publications) < max_results:
             params = {
-                'filter': f'issn:{issn},type:book',  # Filter for book-level records (volumes) only
+                'filter': f'issn:{issn},type:book',  # Filter for book-level records (proceedings volumes)
                 'rows': rows,
                 'cursor': cursor,  # Use cursor instead of offset for deep pagination
-                'select': 'DOI,title,author,published-print,published-online,container-title,volume,page,ISBN,ISSN,publisher,type'
+                'select': 'DOI,title,subtitle,author,editor,published-print,published-online,container-title,volume,page,ISBN,ISSN,publisher,type,event'
             }
             
             # Add year filter if specified
@@ -246,8 +247,8 @@ class CrossRefScraper:
             title_list = item.get('title', ['Unknown Title'])
             title = title_list[0] if title_list else 'Unknown Title'
             
-            # Extract authors
-            authors_data = item.get('author', [])
+            # Extract authors/editors (books have editors, book-chapters have authors)
+            authors_data = item.get('author', []) or item.get('editor', [])
             authors = []
             for author_data in authors_data:
                 given = author_data.get('given', '')
@@ -256,6 +257,8 @@ class CrossRefScraper:
                 if not name:
                     name = author_data.get('name', 'Unknown')
                 authors.append(Author(name=name))
+            
+            # Note: For proceedings volumes (type:book), these are typically editors, not authors
             
             # Extract year
             year = None
@@ -284,6 +287,23 @@ class CrossRefScraper:
             # Publisher
             publisher = item.get('publisher', 'Springer')
             
+            # Extract event dates — try sources in priority order
+            subtitle_list = item.get('subtitle', [])
+            subtitle = subtitle_list[0] if subtitle_list else None
+
+            event_info = ConferenceDateExtractor.extract_from_crossref(item)
+            if not event_info or event_info.get('confidence') == 'low':
+                # Subtitle carries the full conference string, e.g.
+                # "33rd International Conference, ..., October 21-22, 2024, Proceedings"
+                if subtitle:
+                    sub_info = ConferenceDateExtractor.extract_from_title(subtitle)
+                    if sub_info and sub_info.get('confidence', '') > (event_info or {}).get('confidence', ''):
+                        event_info = sub_info
+            if not event_info or event_info.get('confidence') == 'low':
+                title_info = ConferenceDateExtractor.extract_from_title(title)
+                if title_info and title_info.get('confidence', '') > (event_info or {}).get('confidence', ''):
+                    event_info = title_info
+            
             publication = Publication(
                 title=title,
                 authors=authors,
@@ -295,7 +315,12 @@ class CrossRefScraper:
                 doi=doi,
                 ee=ee,
                 isbn=isbn,
-                publisher=publisher
+                publisher=publisher,
+                event_date_start=event_info.get('event_date_start') if event_info else None,
+                event_date_end=event_info.get('event_date_end') if event_info else None,
+                event_year=event_info.get('event_year') if event_info else None,
+                event_month=event_info.get('event_month') if event_info else None,
+                event_date_confidence=event_info.get('confidence') if event_info else None
             )
             
             return publication

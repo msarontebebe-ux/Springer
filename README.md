@@ -13,7 +13,18 @@ python main_crossref.py --series LNCS --year-start 2024
 
 # Scrape all series from 2020
 python main_crossref.py --year-start 2020
+
+# Scrape specific year range
+python main_crossref.py --series CCIS --year-start 2020 --year-end 2025
 ```
+
+## Data Lake Architecture
+
+This project uses a 3-layer data lake structure:
+
+1. **Bronze Layer** (`data/bronze/`) - Raw API responses (untouched)
+2. **Silver Layer** (`data/silver/`) - Cleaned and structured data
+3. **Gold Layer** (`data/gold/`) - Analytics-ready aggregates (future)
 
 ## What This Scrapes
 

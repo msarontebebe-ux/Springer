@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Springer Publications Browser</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        /* ── Header ── */
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        header h1 { font-size: 2.5em; margin-bottom: 10px; }
+        header p  { font-size: 1.1em; opacity: 0.9; }
+
+        /* ── Tabs ── */
+        .tabs {
+            display: flex;
+            background: #f8f9fa;
+            border-bottom: 2px solid #e9ecef;
+        }
+        .tab-btn {
+            flex: 1;
+            padding: 16px;
+            border: none;
+            background: transparent;
+            font-size: 1em;
+            font-weight: 600;
+            color: #6c757d;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            transition: all 0.2s;
+        }
+        .tab-btn.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+            background: white;
+        }
+        .tab-btn:hover:not(.active) { background: #e9ecef; }
+
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+
+        /* ── Summary bar ── */
+        .summary-bar {
+            display: flex;
+            justify-content: space-around;
+            padding: 20px 30px;
+            background: white;
+            border-bottom: 1px solid #e9ecef;
+        }
+        .sum-card { text-align: center; }
+        .sum-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+        }
+        .sum-label { color: #6c757d; font-size: 0.85em; margin-top: 2px; }
+
+        /* ── Browse tab ── */
+        .search-section {
+            padding: 30px;
+            background: #f8f9fa;
+            border-bottom: 2px solid #e9ecef;
+        }
+        .search-form {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        .form-group { display: flex; flex-direction: column; }
+        label {
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #495057;
+            font-size: 0.9em;
+        }
+        input, select {
+            padding: 10px;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+        input:focus, select:focus { outline: none; border-color: #667eea; }
+
+        .button-group { display: flex; gap: 10px; flex-wrap: wrap; }
+        button {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102,126,234,0.4);
+        }
+        .btn-secondary { background: #6c757d; color: white; }
+        .btn-secondary:hover { background: #5a6268; }
+
+        .results { padding: 30px; }
+
+        .publication {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            transition: all 0.3s;
+        }
+        .publication:hover {
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            transform: translateX(5px);
+        }
+        .pub-title { font-size: 1.2em; font-weight: 600; color: #212529; margin-bottom: 10px; }
+        .pub-meta  { display: flex; flex-wrap: wrap; gap: 15px; font-size: 0.9em; color: #6c757d; margin-bottom: 10px; }
+        .meta-item { display: flex; align-items: center; gap: 5px; }
+        .badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.8em; font-weight: 600; }
+        .badge-series { background: #667eea; color: white; }
+        .badge-year   { background: #28a745; color: white; }
+        .badge-event  { background: #fd7e14; color: white; }
+        .pub-authors  { color: #495057; margin-bottom: 8px; font-style: italic; }
+        .pub-link     { color: #667eea; text-decoration: none; font-weight: 600; }
+        .pub-link:hover { text-decoration: underline; }
+
+        /* ── Analytics tab ── */
+        .analytics { padding: 30px; }
+        .analytics h2 { margin-bottom: 20px; color: #212529; font-size: 1.4em; }
+
+        /* Series cards */
+        .series-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 16px;
+            margin-bottom: 40px;
+        }
+        .series-card {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 12px;
+            padding: 20px;
+            border-top: 4px solid #667eea;
+            transition: box-shadow 0.2s;
+        }
+        .series-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.1); }
+        .series-card h3 { font-size: 0.9em; color: #667eea; font-weight: 700; margin-bottom: 12px; }
+        .series-card .big  { font-size: 1.8em; font-weight: bold; color: #212529; }
+        .series-card .sub  { font-size: 0.8em; color: #6c757d; margin-top: 2px; }
+        .series-metrics { display: flex; gap: 16px; margin-top: 12px; }
+        .series-metric { text-align: center; flex: 1; }
+
+        /* Chart section */
+        .chart-section { margin-bottom: 40px; }
+        .chart-controls {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+        .chart-controls label { margin: 0; font-weight: 600; color: #495057; }
+        .chart-controls select { padding: 8px 12px; font-size: 0.9em; width: auto; }
+        .chart-wrapper {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid #e9ecef;
+        }
+
+        /* Authors table */
+        .authors-section { margin-bottom: 40px; }
+        .authors-controls {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+        .authors-controls label { margin: 0; font-weight: 600; color: #495057; }
+        .authors-controls select { padding: 8px 12px; font-size: 0.9em; width: auto; }
+
+        .authors-table { width: 100%; border-collapse: collapse; }
+        .authors-table th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 16px;
+            text-align: left;
+            font-size: 0.9em;
+        }
+        .authors-table th:last-child { text-align: right; }
+        .authors-table td { padding: 10px 16px; border-bottom: 1px solid #e9ecef; font-size: 0.9em; }
+        .authors-table td:last-child { text-align: right; font-weight: 600; color: #667eea; }
+        .authors-table tr:hover td { background: #f8f9fa; }
+        .rank-badge {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            line-height: 24px;
+            text-align: center;
+            border-radius: 50%;
+            font-size: 0.75em;
+            font-weight: 700;
+            background: #e9ecef;
+            color: #495057;
+        }
+        .rank-1 { background: #ffd700; color: #856404; }
+        .rank-2 { background: #c0c0c0; color: #495057; }
+        .rank-3 { background: #cd7f32; color: white; }
+
+        /* Quality table */
+        .quality-table { width: 100%; border-collapse: collapse; }
+        .quality-table th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; padding: 12px 16px;
+            text-align: left; font-size: 0.9em;
+        }
+        .quality-table th:not(:first-child) { text-align: center; }
+        .quality-table td { padding: 10px 16px; border-bottom: 1px solid #e9ecef; font-size: 0.9em; }
+        .quality-table td:not(:first-child) { text-align: center; }
+        .quality-table tr:hover td { background: #f8f9fa; }
+        .q-bar-wrap { display: flex; align-items: center; gap: 8px; justify-content: center; }
+        .q-bar { height: 8px; border-radius: 4px; background: #e9ecef; width: 80px; overflow: hidden; }
+        .q-fill { height: 100%; border-radius: 4px; }
+        .q-green  { background: #28a745; }
+        .q-orange { background: #fd7e14; }
+        .q-red    { background: #dc3545; }
+
+        /* Shared utility */
+        .loading { text-align: center; padding: 40px; color: #6c757d; }
+        .error {
+            background: #f8d7da; color: #721c24;
+            padding: 15px; border-radius: 8px;
+            border-left: 4px solid #dc3545;
+        }
+        .empty { text-align: center; padding: 40px; color: #6c757d; }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <header>
+        <h1>Springer Publications Browser</h1>
+        <p>Conference Proceedings Metadata — 8 Series from CrossRef</p>
+    </header>
+
+    <!-- Summary bar (always visible) -->
+    <div class="summary-bar" id="summaryBar">
+        <div class="sum-card">
+            <div class="sum-number" id="sumPubs">—</div>
+            <div class="sum-label">Publications</div>
+        </div>
+        <div class="sum-card">
+            <div class="sum-number" id="sumAuthors">—</div>
+            <div class="sum-label">Authors</div>
+        </div>
+        <div class="sum-card">
+            <div class="sum-number" id="sumSeries">—</div>
+            <div class="sum-label">Series</div>
+        </div>
+        <div class="sum-card">
+            <div class="sum-number" id="sumYears">—</div>
+            <div class="sum-label">Year Range</div>
+        </div>
+    </div>
+
+    <!-- Tab navigation -->
+    <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('browse')">Browse Publications</button>
+        <button class="tab-btn"        onclick="switchTab('analytics')">Analytics</button>
+    </div>
+
+    <!-- ── BROWSE TAB ── -->
+    <div class="tab-panel active" id="tab-browse">
+        <div class="search-section">
+            <div class="search-form">
+                <div class="form-group">
+                    <label for="series">Series:</label>
+                    <select id="series">
+                        <option value="">All Series</option>
+                        <option value="LNCS">LNCS — Lecture Notes in Computer Science</option>
+                        <option value="LNAI">LNAI — Lecture Notes in Artificial Intelligence</option>
+                        <option value="LNBI">LNBI — Lecture Notes in Bioinformatics</option>
+                        <option value="CCIS">CCIS — Communications in Computer and Information Science</option>
+                        <option value="IFIP AICT">IFIP AICT — IFIP Advances in ICT</option>
+                        <option value="LNEE">LNEE — Lecture Notes in Electrical Engineering</option>
+                        <option value="LNNS">LNNS — Lecture Notes in Networks and Systems</option>
+                        <option value="AISC">AISC — Advances in Intelligent Systems and Computing</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="year">Year:</label>
+                    <input type="number" id="year" placeholder="e.g., 2024" min="1970" max="2026">
+                </div>
+                <div class="form-group">
+                    <label for="query">Search Title:</label>
+                    <input type="text" id="query" placeholder="e.g., machine learning">
+                </div>
+                <div class="form-group">
+                    <label for="limit">Results Limit:</label>
+                    <select id="limit">
+                        <option value="50">50</option>
+                        <option value="100" selected>100</option>
+                        <option value="200">200</option>
+                        <option value="500">500</option>
+                    </select>
+                </div>
+            </div>
+            <div class="button-group">
+                <button class="btn-primary"   onclick="searchPublications()">Search</button>
+                <button class="btn-secondary" onclick="loadRecent()">Recent</button>
+            </div>
+        </div>
+        <div class="results" id="results">
+            <div class="empty">Use the filters above to search publications, or click Recent.</div>
+        </div>
+    </div>
+
+    <!-- ── ANALYTICS TAB ── -->
+    <div class="tab-panel" id="tab-analytics">
+        <div class="analytics">
+
+            <!-- Series cards -->
+            <h2>Series Overview</h2>
+            <div class="series-grid" id="seriesGrid">
+                <div class="loading">Loading series data...</div>
+            </div>
+
+            <!-- Trend chart -->
+            <div class="chart-section">
+                <h2>Publication Trends</h2>
+                <div class="chart-controls">
+                    <label for="trendSeries">Series:</label>
+                    <select id="trendSeries" onchange="loadTrends()">
+                        <option value="">All Series</option>
+                        <option value="LNCS">LNCS</option>
+                        <option value="LNAI">LNAI</option>
+                        <option value="CCIS">CCIS</option>
+                        <option value="IFIP AICT">IFIP AICT</option>
+                        <option value="LNEE">LNEE</option>
+                        <option value="LNNS">LNNS</option>
+                        <option value="AISC">AISC</option>
+                    </select>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="trendsChart" height="100"></canvas>
+                </div>
+            </div>
+
+            <!-- Data quality -->
+            <div class="quality-section" style="margin-bottom:40px">
+                <h2>Data Quality</h2>
+                <p style="color:#6c757d;margin-bottom:16px;font-size:0.9em">
+                    Coverage percentages show what proportion of records have each field populated.
+                    Computed automatically after every scrape.
+                </p>
+                <div id="qualityTable"><div class="loading">Loading quality metrics...</div></div>
+            </div>
+
+            <!-- Top authors -->
+            <div class="authors-section">
+                <h2>Top Authors</h2>
+                <div class="authors-controls">
+                    <label for="authorSeries">Series:</label>
+                    <select id="authorSeries" onchange="loadAuthors()">
+                        <option value="">All Series</option>
+                        <option value="LNCS">LNCS</option>
+                        <option value="LNAI">LNAI</option>
+                        <option value="CCIS">CCIS</option>
+                        <option value="IFIP AICT">IFIP AICT</option>
+                        <option value="LNEE">LNEE</option>
+                        <option value="LNNS">LNNS</option>
+                        <option value="AISC">AISC</option>
+                    </select>
+                    <label for="authorLimit">Show:</label>
+                    <select id="authorLimit" onchange="loadAuthors()">
+                        <option value="10">Top 10</option>
+                        <option value="20" selected>Top 20</option>
+                        <option value="50">Top 50</option>
+                    </select>
+                </div>
+                <div id="authorsTable"><div class="loading">Loading authors...</div></div>
+            </div>
+
+        </div>
+    </div>
+
+</div><!-- /container -->
+
+<script>
+const API = 'http://localhost:5000';
+
+// Colour palette for chart lines
+const PALETTE = [
+    '#667eea','#764ba2','#f093fb','#f5576c',
+    '#4facfe','#00f2fe','#43e97b','#fa709a'
+];
+
+// ── Tab switching ──────────────────────────────────────────────
+function switchTab(name) {
+    document.querySelectorAll('.tab-btn').forEach((b,i) => {
+        b.classList.toggle('active', ['browse','analytics'][i] === name);
+    });
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+
+    if (name === 'analytics') initAnalytics();
+}
+
+// ── Summary bar ────────────────────────────────────────────────
+async function loadSummary() {
+    try {
+        const r = await fetch(`${API}/api/stats`);
+        const d = await r.json();
+        document.getElementById('sumPubs').textContent    = d.total_publications.toLocaleString();
+        document.getElementById('sumAuthors').textContent = (d.total_authors || 0).toLocaleString();
+        document.getElementById('sumSeries').textContent  = d.total_series;
+        document.getElementById('sumYears').textContent   =
+            `${d.year_range.earliest}–${d.year_range.latest}`;
+    } catch(e) {
+        console.warn('Could not load summary', e);
+    }
+}
+
+// ── Browse tab ─────────────────────────────────────────────────
+async function searchPublications() {
+    const params = new URLSearchParams();
+    const s = document.getElementById('series').value;
+    const y = document.getElementById('year').value;
+    const q = document.getElementById('query').value;
+    const l = document.getElementById('limit').value;
+    if (s) params.append('series', s);
+    if (y) params.append('year', y);
+    if (q) params.append('query', q);
+    if (l) params.append('limit', l);
+
+    showLoading('results');
+    try {
+        const r = await fetch(`${API}/api/publications?${params}`);
+        const d = await r.json();
+        renderPublications(d.results, d.count);
+    } catch(e) {
+        showError('results', 'Failed to connect to API. Make sure the server is running on port 5000.');
+    }
+}
+
+async function loadRecent() {
+    showLoading('results');
+    try {
+        const r = await fetch(`${API}/api/publications/recent?limit=100`);
+        const d = await r.json();
+        renderPublications(d.results, d.count);
+    } catch(e) {
+        showError('results', 'Failed to load recent publications.');
+    }
+}
+
+function renderPublications(pubs, count) {
+    const el = document.getElementById('results');
+    if (!pubs || !pubs.length) {
+        el.innerHTML = '<div class="empty">No publications found. Try different search criteria.</div>';
+        return;
+    }
+    let html = `<h2 style="margin-bottom:20px">Found ${count} publication(s)</h2>`;
+    pubs.forEach(pub => {
+        const authors = Array.isArray(pub.authors)
+            ? pub.authors.map(a => a.name || a).join(', ')
+            : pub.authors || 'Unknown';
+        const eventBadge = pub.event_date_start
+            ? `<span class="badge badge-event">${pub.event_date_start}</span>` : '';
+        html += `
+            <div class="publication">
+                <div class="pub-title">${pub.title}</div>
+                <div class="pub-authors">${authors}</div>
+                <div class="pub-meta">
+                    <div class="meta-item"><span class="badge badge-series">${pub.series || 'Unknown'}</span></div>
+                    <div class="meta-item"><span class="badge badge-year">${pub.year || 'N/A'}</span></div>
+                    ${eventBadge}
+                    ${pub.volume ? `<span>Vol. ${pub.volume}</span>` : ''}
+                    ${pub.pages  ? `<span>pp. ${pub.pages}</span>`  : ''}
+                </div>
+                ${pub.doi ? `<a href="https://doi.org/${pub.doi}" target="_blank" class="pub-link">${pub.doi}</a>` : ''}
+            </div>`;
+    });
+    el.innerHTML = html;
+}
+
+// ── Analytics tab ──────────────────────────────────────────────
+let analyticsLoaded = false;
+let trendsChartInstance = null;
+
+function initAnalytics() {
+    if (analyticsLoaded) return;
+    analyticsLoaded = true;
+    loadSeriesCards();
+    loadTrends();
+    loadQuality();
+    loadAuthors();
+}
+
+// Series cards
+async function loadSeriesCards() {
+    try {
+        const r = await fetch(`${API}/api/gold/stats`);
+        const d = await r.json();
+        const grid = document.getElementById('seriesGrid');
+        if (!d.stats || !d.stats.length) {
+            grid.innerHTML = '<div class="empty">No series data available.</div>';
+            return;
+        }
+        grid.innerHTML = d.stats.map(s => `
+            <div class="series-card">
+                <h3>${s.series}</h3>
+                <div class="big">${s.total_publications.toLocaleString()}</div>
+                <div class="sub">publications</div>
+                <div class="series-metrics">
+                    <div class="series-metric">
+                        <div style="font-weight:600">${s.total_unique_authors.toLocaleString()}</div>
+                        <div class="sub">authors</div>
+                    </div>
+                    <div class="series-metric">
+                        <div style="font-weight:600">${s.year_min}–${s.year_max}</div>
+                        <div class="sub">years</div>
+                    </div>
+                    <div class="series-metric">
+                        <div style="font-weight:600">${s.avg_authors_per_paper}</div>
+                        <div class="sub">avg authors</div>
+                    </div>
+                </div>
+            </div>`).join('');
+    } catch(e) {
+        document.getElementById('seriesGrid').innerHTML =
+            `<div class="error">Failed to load series data: ${e.message}</div>`;
+    }
+}
+
+// Trend chart
+async function loadTrends() {
+    const series = document.getElementById('trendSeries').value;
+    const url = series
+        ? `${API}/api/gold/trends?series=${encodeURIComponent(series)}`
+        : `${API}/api/gold/trends`;
+
+    try {
+        const r = await fetch(url);
+        const d = await r.json();
+
+        // Group by series → { seriesName: { year: count } }
+        const grouped = {};
+        d.trends.forEach(row => {
+            if (!grouped[row.series]) grouped[row.series] = {};
+            grouped[row.series][row.year] = row.publication_count;
+        });
+
+        // Collect all years
+        const allYears = [...new Set(d.trends.map(r => r.year))].sort();
+
+        const datasets = Object.entries(grouped).map(([name, byYear], i) => ({
+            label: name,
+            data: allYears.map(y => byYear[y] || 0),
+            borderColor: PALETTE[i % PALETTE.length],
+            backgroundColor: PALETTE[i % PALETTE.length] + '22',
+            borderWidth: 2,
+            pointRadius: allYears.length > 30 ? 0 : 3,
+            tension: 0.3,
+            fill: false,
+        }));
+
+        const ctx = document.getElementById('trendsChart').getContext('2d');
+        if (trendsChartInstance) trendsChartInstance.destroy();
+        trendsChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: { labels: allYears, datasets },
+            options: {
+                responsive: true,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { position: 'top' },
+                    tooltip: { callbacks: {
+                        title: items => `Year ${items[0].label}`
+                    }}
+                },
+                scales: {
+                    x: { title: { display: true, text: 'Year' } },
+                    y: { title: { display: true, text: 'Publications' }, beginAtZero: true }
+                }
+            }
+        });
+    } catch(e) {
+        document.querySelector('.chart-wrapper').innerHTML =
+            `<div class="error">Failed to load trends: ${e.message}</div>`;
+    }
+}
+
+// Quality metrics table
+async function loadQuality() {
+    const container = document.getElementById('qualityTable');
+    try {
+        const r = await fetch(`${API}/api/quality`);
+        const d = await r.json();
+        if (!d.metrics || !d.metrics.length) {
+            container.innerHTML = '<div class="empty">No quality data available.</div>';
+            return;
+        }
+
+        function bar(pct) {
+            const cls = pct >= 90 ? 'q-green' : pct >= 50 ? 'q-orange' : 'q-red';
+            return `<div class="q-bar-wrap">
+                <div class="q-bar"><div class="q-fill ${cls}" style="width:${pct}%"></div></div>
+                <span>${pct.toFixed(1)}%</span>
+            </div>`;
+        }
+
+        let html = `<table class="quality-table">
+            <thead><tr>
+                <th>Series</th>
+                <th>Records</th>
+                <th>DOI</th>
+                <th>Event Year</th>
+                <th>Event Date</th>
+                <th>Has Authors</th>
+            </tr></thead><tbody>`;
+
+        d.metrics.forEach(m => {
+            html += `<tr>
+                <td>${m.series}</td>
+                <td style="text-align:center;font-weight:600">${m.total_records.toLocaleString()}</td>
+                <td>${bar(m.doi_coverage_pct)}</td>
+                <td>${bar(m.event_year_coverage_pct || 0)}</td>
+                <td>${bar(m.event_date_coverage_pct)}</td>
+                <td>${bar(m.author_coverage_pct)}</td>
+            </tr>`;
+        });
+
+        html += '</tbody></table>';
+        container.innerHTML = html;
+    } catch(e) {
+        container.innerHTML = `<div class="error">Failed to load quality metrics: ${e.message}</div>`;
+    }
+}
+
+// Top authors table
+async function loadAuthors() {
+    const series = document.getElementById('authorSeries').value;
+    const limit  = document.getElementById('authorLimit').value;
+    const params = new URLSearchParams({ limit });
+    if (series) params.append('series', series);
+
+    const container = document.getElementById('authorsTable');
+    container.innerHTML = '<div class="loading">Loading...</div>';
+
+    try {
+        const r = await fetch(`${API}/api/gold/authors?${params}`);
+        const d = await r.json();
+
+        if (!d.authors || !d.authors.length) {
+            container.innerHTML = '<div class="empty">No author data available.</div>';
+            return;
+        }
+
+        let html = `<table class="authors-table">
+            <thead><tr>
+                <th>#</th>
+                <th>Author</th>
+                <th>Series</th>
+                <th>Publications</th>
+            </tr></thead><tbody>`;
+
+        d.authors.forEach((a, i) => {
+            const rank = i + 1;
+            const rankClass = rank <= 3 ? `rank-${rank}` : '';
+            html += `<tr>
+                <td><span class="rank-badge ${rankClass}">${rank}</span></td>
+                <td>${a.author_name}</td>
+                <td><span class="badge badge-series" style="font-size:0.75em">${a.series}</span></td>
+                <td>${a.publication_count}</td>
+            </tr>`;
+        });
+
+        html += '</tbody></table>';
+        container.innerHTML = html;
+    } catch(e) {
+        container.innerHTML = `<div class="error">Failed to load authors: ${e.message}</div>`;
+    }
+}
+
+// ── Utilities ──────────────────────────────────────────────────
+function showLoading(id) {
+    document.getElementById(id).innerHTML = '<div class="loading">Loading...</div>';
+}
+function showError(id, msg) {
+    document.getElementById(id).innerHTML = `<div class="error">${msg}</div>`;
+}
+
+// ── Init ───────────────────────────────────────────────────────
+loadSummary();
+document.getElementById('query').addEventListener('keypress', e => {
+    if (e.key === 'Enter') searchPublications();
+});
+</script>
+</body>
+</html>

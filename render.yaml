@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: springer-publications-api
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn api_server:app
+    envVars:
+      - key: DATABASE_URL
+        sync: false   # set manually in Render dashboard (keeps it secret)
+      - key: PYTHON_VERSION
+        value: 3.11.0

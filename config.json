@@ -15,8 +15,10 @@
       "dblp_venue": "lnai",
       "springer_series_id": "1244",
       "springer_url": "https://link.springer.com/bookseries/1244",
-      "issn": "0302-9743",
-      "parent_series": "LNCS"
+      "issn_shared_with": "LNCS",
+      "scrape_via_issn": false,
+      "parent_series": "LNCS",
+      "note": "CrossRef returns container-title='Lecture Notes in Computer Science' for all LNAI records — indistinguishable from LNCS by ISSN. Records are captured in the LNCS scrape and must be classified post-hoc."
     },
     {
       "name": "Lecture Notes in Bioinformatics",
@@ -24,8 +26,10 @@
       "dblp_venue": "lnbi",
       "springer_series_id": "5381",
       "springer_url": "https://link.springer.com/bookseries/5381",
-      "issn": "0302-9743",
-      "parent_series": "LNCS"
+      "issn_shared_with": "LNCS",
+      "scrape_via_issn": false,
+      "parent_series": "LNCS",
+      "note": "CrossRef returns container-title='Lecture Notes in Computer Science' for all LNBI records — indistinguishable from LNCS by ISSN. Records are captured in the LNCS scrape and must be classified post-hoc."
     },
     {
       "name": "Communications in Computer and Information Science",
@@ -80,7 +84,7 @@
   },
   "crossref_api": {
     "base_url": "https://api.crossref.org/works",
-    "email": "your.email@example.com",
+    "email": "saripari61@gmail.com",
     "delay": 1.0,
     "max_results_per_query": 50000
   },

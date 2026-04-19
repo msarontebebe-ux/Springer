@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls c:/Users/saron/project/*.py)"
+    ]
+  }
+}

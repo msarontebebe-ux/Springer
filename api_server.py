@@ -18,7 +18,7 @@ try:
 except ImportError:
     pass
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from sqlalchemy import text
 
@@ -275,6 +275,11 @@ def _search_files(series: str = None, year: int = None,
 
 @app.route('/')
 def home():
+    return send_from_directory('.', 'web_interface.html')
+
+
+@app.route('/api')
+def api_index():
     return jsonify({
         'name':    'Springer Publications API',
         'version': '2.0',

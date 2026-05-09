@@ -32,6 +32,9 @@ Thumbs.db
 # Secrets
 .env
 
+# Claude Code local settings (personal, machine-specific)
+.claude/settings.local.json
+
 # Logs
 *.log
 

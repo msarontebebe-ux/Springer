@@ -7,7 +7,9 @@ import json
 import os
 from pathlib import Path
 from typing import List, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+from xml.sax.saxutils import escape as xml_escape
+from email.utils import format_datetime as fmt_rfc2822
 
 # Load .env first so DATABASE_URL is visible before anything else
 try:
@@ -278,14 +280,16 @@ def home():
         'version': '2.0',
         'backend': 'database' if _db_available() else 'local-files',
         'endpoints': {
-            '/api/series':              'All series with publication counts',
-            '/api/publications':        'Search publications (params: series, year, query, limit)',
-            '/api/publications/recent': 'Most recent publications',
-            '/api/stats':               'Overall database statistics',
-            '/api/gold/stats':          'Gold layer: per-series aggregations',
-            '/api/gold/trends':         'Gold layer: yearly publication trends (param: series)',
-            '/api/gold/authors':        'Gold layer: top authors (params: series, limit)',
-            '/health':                  'Health check',
+            '/api/series':                'All series with publication counts',
+            '/api/publications':          'Search publications (params: series, year, query, limit)',
+            '/api/publications/recent':   'Most recent publications',
+            '/api/publications/new':      'PUSH — new additions since a date (param: since=YYYY-MM-DD, series)',
+            '/feed.rss':                  'PUSH — RSS feed for subscription (param: series, limit)',
+            '/api/stats':                 'Overall database statistics',
+            '/api/gold/stats':            'Gold layer: per-series aggregations',
+            '/api/gold/trends':           'Gold layer: yearly publication trends (param: series)',
+            '/api/gold/authors':          'Gold layer: top authors (params: series, limit)',
+            '/health':                    'Health check',
         },
     })
 
@@ -485,6 +489,135 @@ def gold_authors():
 
 
 # ---------------------------------------------------------------------------
+# Push endpoints
+# ---------------------------------------------------------------------------
+
+@app.route('/api/publications/new')
+def get_new_publications():
+    """
+    Return publications added since a given date — the pull side of push.
+    Clients poll this on a schedule to get only what is new.
+
+    Params:
+      since  — ISO date (YYYY-MM-DD). Defaults to 7 days ago.
+      series — optional series filter (abbreviation or full name)
+      limit  — max results (default 100, max 1000)
+    """
+    since_str = request.args.get('since')
+    series    = request.args.get('series')
+    limit     = min(request.args.get('limit', default=100, type=int), 1000)
+
+    if since_str:
+        try:
+            since = datetime.fromisoformat(since_str)
+        except ValueError:
+            return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
+    else:
+        since = datetime.utcnow() - timedelta(days=7)
+
+    if not _db_available():
+        return jsonify({'error': 'Database not configured'}), 503
+
+    try:
+        from models_db import Publication
+        session = _get_session()
+        try:
+            q = session.query(Publication).filter(Publication.fetched_at >= since)
+            if series:
+                full_name = _resolve_series(series)
+                q = q.filter(Publication.series.ilike(f'%{full_name}%'))
+            q = q.order_by(Publication.fetched_at.desc()).limit(limit)
+            results = [pub.to_dict() for pub in q.all()]
+        finally:
+            session.close()
+        return jsonify({
+            'results': results,
+            'count':   len(results),
+            'since':   since.isoformat(),
+            'source':  'database',
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/feed.rss')
+def rss_feed():
+    """
+    RSS 2.0 feed of the most recently scraped publications.
+    Users subscribe with any RSS reader and get notified automatically
+    when new publications are added — this is the push mechanism.
+
+    Params:
+      series — optional filter (abbreviation or full name)
+      limit  — number of items (default 50, max 200)
+    """
+    series = request.args.get('series')
+    limit  = min(request.args.get('limit', default=50, type=int), 200)
+
+    if not _db_available():
+        return 'Database not configured', 503
+
+    try:
+        from models_db import Publication
+        session = _get_session()
+        try:
+            q = session.query(Publication)
+            if series:
+                full_name = _resolve_series(series)
+                q = q.filter(Publication.series.ilike(f'%{full_name}%'))
+            q = q.order_by(Publication.fetched_at.desc()).limit(limit)
+
+            # Build RSS items while session is still open so lazy-loaded
+            # relationships (authors) are accessible.
+            items_xml = []
+            for pub in q.all():
+                title = xml_escape(pub.title or 'Untitled')
+                link  = xml_escape(pub.url or (f'https://doi.org/{pub.doi}' if pub.doi else ''))
+                guid  = xml_escape(f'https://doi.org/{pub.doi}' if pub.doi else pub.title or '')
+
+                desc_parts = []
+                if pub.series:           desc_parts.append(f'Series: {pub.series}')
+                if pub.year:             desc_parts.append(f'Year: {pub.year}')
+                if pub.event_name:       desc_parts.append(f'Conference: {pub.event_name}')
+                if pub.event_location:   desc_parts.append(f'Location: {pub.event_location}')
+                if pub.event_date_start: desc_parts.append(f'Event date: {pub.event_date_start}')
+                author_names = [a.name for a in pub.authors[:5]]
+                if author_names:         desc_parts.append(f'Editors: {"; ".join(author_names)}')
+                description = xml_escape(' | '.join(desc_parts))
+
+                pub_date = ''
+                if pub.fetched_at:
+                    dt = pub.fetched_at.replace(tzinfo=timezone.utc)
+                    pub_date = f'<pubDate>{fmt_rfc2822(dt)}</pubDate>'
+
+                items_xml.append(f"""    <item>
+      <title>{title}</title>
+      <link>{link}</link>
+      <description>{description}</description>
+      <guid isPermaLink="false">{guid}</guid>
+      {pub_date}
+    </item>""")
+        finally:
+            session.close()
+    except Exception as e:
+        return str(e), 500
+
+    feed_title = f'Springer Publications — {series.upper()}' if series else 'Springer Publications'
+    xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>{xml_escape(feed_title)}</title>
+    <link>{xml_escape(request.host_url)}</link>
+    <description>New Springer book series publications (LNCS, CCIS and more)</description>
+    <language>en</language>
+{chr(10).join(items_xml)}
+  </channel>
+</rss>"""
+
+    return app.response_class(xml, mimetype='application/rss+xml')
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -500,6 +633,8 @@ if __name__ == '__main__':
     print("  GET /api/series")
     print("  GET /api/publications?series=LNCS&year=2024&query=machine")
     print("  GET /api/publications/recent")
+    print("  GET /api/publications/new?since=2024-01-01&series=LNCS  [PUSH]")
+    print("  GET /feed.rss?series=LNCS                               [PUSH/RSS]")
     print("  GET /api/stats")
     print("  GET /api/gold/stats")
     print("  GET /api/gold/trends?series=LNCS")

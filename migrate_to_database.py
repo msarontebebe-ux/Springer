@@ -46,6 +46,8 @@ def load_publications_from_json(filepath: Path) -> list[Publication]:
             event_year=rec.get("event_year"),
             event_month=rec.get("event_month"),
             event_date_confidence=rec.get("event_date_confidence"),
+            event_name=rec.get("event_name"),
+            event_location=rec.get("event_location"),
         )
         publications.append(pub)
 

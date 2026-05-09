@@ -163,6 +163,8 @@ class DataLakeStorageHandler:
             'url',             # Direct link to paper
             'isbn',            # ISBN of proceedings volume
             'publisher',       # Publisher name
+            'event_name',       # Conference acronym+year (e.g. ECCV 2024)
+            'event_location',   # Conference location (e.g. Milan, Italy)
             'event_date_start', # Conference start date
             'event_date_end',   # Conference end date
             'event_year',       # Conference year

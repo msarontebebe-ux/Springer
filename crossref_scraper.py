@@ -320,7 +320,9 @@ class CrossRefScraper:
                 event_date_end=event_info.get('event_date_end') if event_info else None,
                 event_year=event_info.get('event_year') if event_info else None,
                 event_month=event_info.get('event_month') if event_info else None,
-                event_date_confidence=event_info.get('confidence') if event_info else None
+                event_date_confidence=event_info.get('confidence') if event_info else None,
+                event_name=event_info.get('event_name') if event_info else None,
+                event_location=event_info.get('event_location') if event_info else None,
             )
             
             return publication

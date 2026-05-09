@@ -88,7 +88,9 @@ def update_event_dates(db_engine, doi_to_subtitle: dict) -> int:
                     event_date_end        = :end,
                     event_year            = COALESCE(event_year, :year),
                     event_month           = COALESCE(event_month, :month),
-                    event_date_confidence = :conf
+                    event_date_confidence = :conf,
+                    event_name            = COALESCE(event_name, :name),
+                    event_location        = COALESCE(event_location, :location)
                 WHERE doi = :doi
                   AND event_date_start IS NULL
             """), {
@@ -98,6 +100,8 @@ def update_event_dates(db_engine, doi_to_subtitle: dict) -> int:
                 "year": info.get("event_year"),
                 "month": info.get("event_month"),
                 "conf": info.get("confidence"),
+                "name": info.get("event_name"),
+                "location": info.get("event_location"),
             })
             updated += result.rowcount
 

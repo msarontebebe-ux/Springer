@@ -1,5 +1,5 @@
 """
-Extract conference event dates from Springer proceedings metadata.
+Extract conference event dates, name, and location from Springer proceedings metadata.
 
 CrossRef book-level records almost never include an explicit event field.
 The main extraction path is title parsing, which yields results for the
@@ -69,9 +69,79 @@ class ConferenceDateExtractor:
             re.IGNORECASE), 'month_yyyy'),
     ]
 
+    # Regex to detect edition/type words that are NOT place names
+    _EDITION_RE = re.compile(
+        r'\b(proceedings|conference|symposium|workshop|congress|summit|forum|'
+        r'meeting|international|european|annual|joint|lecture|notes|advances|'
+        r'research|selected|papers|part|volume|vol)\b',
+        re.IGNORECASE,
+    )
+
     # ------------------------------------------------------------------ #
     # Public API                                                           #
     # ------------------------------------------------------------------ #
+
+    @classmethod
+    def extract_event_name(cls, title: str) -> Optional[str]:
+        """
+        Extract the conference acronym+year from a proceedings title.
+        Handles patterns like '– ECCV 2024' or '– ECML PKDD 2024'.
+        """
+        if not title:
+            return None
+        # Preferred: acronym after an em/en dash
+        m = re.search(r'[–—]\s*([A-Z]{2,8}(?:[\s-][A-Z]{2,8})*\s+\d{4})\b', title)
+        if m:
+            return m.group(1).strip()
+        # Fallback: bare ACRONYM YEAR anywhere in the title
+        m = re.search(r'\b([A-Z]{3,8}(?:[\s-][A-Z]{2,8})*\s+\d{4})\b', title)
+        if m:
+            return m.group(1).strip()
+        return None
+
+    @classmethod
+    def extract_event_location(cls, title: str) -> Optional[str]:
+        """
+        Extract 'City, Country' (or 'City, State, Country') from a title.
+        Looks at comma-separated segments immediately before the date.
+        """
+        if not title:
+            return None
+
+        # Find the earliest date match position
+        date_pos = len(title)
+        for pattern, _ in cls._PATTERNS:
+            m = pattern.search(title)
+            if m:
+                date_pos = min(date_pos, m.start())
+
+        if date_pos == len(title):
+            return None  # no date found — can't anchor the location
+
+        pre_date = title[:date_pos].strip().rstrip(',')
+        segments = [s.strip() for s in pre_date.split(',')]
+
+        location_parts = []
+        for seg in reversed(segments):
+            if not seg:
+                continue
+            # Digits → year, volume, ordinal → stop walking
+            if re.search(r'\d', seg):
+                break
+            # Edition/type keyword → skip this segment, keep walking
+            if cls._EDITION_RE.search(seg):
+                continue
+            words = seg.split()
+            # Accept 1–4 words where every word starts with uppercase
+            if words and 1 <= len(words) <= 4 and all(w[0].isupper() for w in words):
+                location_parts.insert(0, seg)
+                if len(location_parts) >= 3:  # city + state + country at most
+                    break
+            else:
+                if location_parts:
+                    break  # non-place after we started collecting → stop
+
+        return ', '.join(location_parts) if location_parts else None
 
     @classmethod
     def extract_from_title(cls, title: str) -> Optional[Dict[str, Any]]:
@@ -96,11 +166,13 @@ class ConferenceDateExtractor:
                 if not _valid_date(year, month, d1):
                     continue
                 return {
-                    'event_date_start':      f'{year}-{month:02d}-{d1:02d}',
-                    'event_date_end':        f'{year}-{month:02d}-{d2:02d}' if _valid_date(year, month, d2) else None,
-                    'event_year':            year,
-                    'event_month':           month,
-                    'confidence':            'high',
+                    'event_date_start':  f'{year}-{month:02d}-{d1:02d}',
+                    'event_date_end':    f'{year}-{month:02d}-{d2:02d}' if _valid_date(year, month, d2) else None,
+                    'event_year':        year,
+                    'event_month':       month,
+                    'event_name':        cls.extract_event_name(title),
+                    'event_location':    cls.extract_event_location(title),
+                    'confidence':        'high',
                 }
 
             elif handler == 'dd_dd_month_yyyy':
@@ -111,11 +183,13 @@ class ConferenceDateExtractor:
                 if not _valid_date(year, month, d1):
                     continue
                 return {
-                    'event_date_start':      f'{year}-{month:02d}-{d1:02d}',
-                    'event_date_end':        f'{year}-{month:02d}-{d2:02d}' if _valid_date(year, month, d2) else None,
-                    'event_year':            year,
-                    'event_month':           month,
-                    'confidence':            'high',
+                    'event_date_start':  f'{year}-{month:02d}-{d1:02d}',
+                    'event_date_end':    f'{year}-{month:02d}-{d2:02d}' if _valid_date(year, month, d2) else None,
+                    'event_year':        year,
+                    'event_month':       month,
+                    'event_name':        cls.extract_event_name(title),
+                    'event_location':    cls.extract_event_location(title),
+                    'confidence':        'high',
                 }
 
             elif handler == 'month_dd_yyyy':
@@ -126,11 +200,13 @@ class ConferenceDateExtractor:
                 if not _valid_date(year, month, day):
                     continue
                 return {
-                    'event_date_start':      f'{year}-{month:02d}-{day:02d}',
-                    'event_date_end':        None,
-                    'event_year':            year,
-                    'event_month':           month,
-                    'confidence':            'high',
+                    'event_date_start':  f'{year}-{month:02d}-{day:02d}',
+                    'event_date_end':    None,
+                    'event_year':        year,
+                    'event_month':       month,
+                    'event_name':        cls.extract_event_name(title),
+                    'event_location':    cls.extract_event_location(title),
+                    'confidence':        'high',
                 }
 
             elif handler == 'month_yyyy':
@@ -139,11 +215,13 @@ class ConferenceDateExtractor:
                     continue
                 year = int(g[1])
                 return {
-                    'event_date_start':      f'{year}-{month:02d}-01',
-                    'event_date_end':        None,
-                    'event_year':            year,
-                    'event_month':           month,
-                    'confidence':            'medium',
+                    'event_date_start':  f'{year}-{month:02d}-01',
+                    'event_date_end':    None,
+                    'event_year':        year,
+                    'event_month':       month,
+                    'event_name':        cls.extract_event_name(title),
+                    'event_location':    cls.extract_event_location(title),
+                    'confidence':        'medium',
                 }
 
         return None
@@ -155,6 +233,9 @@ class ConferenceDateExtractor:
         CrossRef book records rarely carry an explicit event field, so this
         falls back to the published-print year (confidence=low).
         """
+        title = (item.get('title') or [''])[0]
+        subtitle = (item.get('subtitle') or [''])[0]
+
         event = item.get('event')
         if event:
             start = event.get('start')
@@ -166,6 +247,8 @@ class ConferenceDateExtractor:
                     'event_date_end':   end,
                     'event_year':       int(parts[0]) if parts else None,
                     'event_month':      int(parts[1]) if len(parts) > 1 else None,
+                    'event_name':       event.get('name') or cls.extract_event_name(subtitle or title),
+                    'event_location':   event.get('location') or cls.extract_event_location(subtitle or title),
                     'confidence':       'high',
                 }
 
@@ -181,6 +264,8 @@ class ConferenceDateExtractor:
                     'event_date_end':   None,
                     'event_year':       year,
                     'event_month':      month,
+                    'event_name':       cls.extract_event_name(subtitle or title),
+                    'event_location':   cls.extract_event_location(subtitle or title),
                     'confidence':       'low',
                 }
 

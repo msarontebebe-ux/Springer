@@ -32,9 +32,17 @@ def init_database():
         conn.commit()
     print("   Schemas ready")
 
-    # 3. Create all tables
+    # 3. Create all tables (new installs) + add any missing columns (existing DBs)
     print("\n3. Creating tables...")
     Base.metadata.create_all(engine)
+    with engine.connect() as conn:
+        conn.execute(text("""
+            ALTER TABLE publications
+                ADD COLUMN IF NOT EXISTS event_name     VARCHAR(255),
+                ADD COLUMN IF NOT EXISTS event_location VARCHAR(255)
+        """))
+        conn.commit()
+    print("   Schema up to date (event_name, event_location columns ensured)")
 
     tables = {
         'bronze': ['raw_responses'],

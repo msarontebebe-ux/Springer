@@ -35,8 +35,35 @@ def _db_configured() -> bool:
     )
 
 
+def _prune_bronze(series_abbr: str, keep: int = 3):
+    """Delete old bronze batches for this series, keeping the most recent `keep`."""
+    try:
+        from database_config import DatabaseConfig
+        from sqlalchemy import text as sa_text
+        session = DatabaseConfig.get_session()
+        try:
+            result = session.execute(sa_text("""
+                DELETE FROM bronze.raw_responses
+                WHERE series_abbr = :abbr
+                AND id NOT IN (
+                    SELECT id FROM bronze.raw_responses
+                    WHERE series_abbr = :abbr
+                    ORDER BY fetched_at DESC
+                    LIMIT :keep
+                )
+            """), {'abbr': series_abbr, 'keep': keep})
+            deleted = result.rowcount
+            session.commit()
+            if deleted:
+                print(f"   Bronze: pruned {deleted} old batch(es) for {series_abbr} (keeping {keep})")
+        finally:
+            session.close()
+    except Exception as exc:
+        print(f"   Bronze prune failed: {exc}")
+
+
 def _write_bronze(raw_data: list, series_abbr: str, series_name: str):
-    """Store raw API response in bronze.raw_responses."""
+    """Store raw API response in bronze.raw_responses, then prune old batches."""
     if not raw_data:
         return
     try:
@@ -57,6 +84,8 @@ def _write_bronze(raw_data: list, series_abbr: str, series_name: str):
         print(f"   Bronze: {len(raw_data)} raw records saved to Neon")
     except Exception as exc:
         print(f"   Bronze write failed: {exc}")
+        return
+    _prune_bronze(series_abbr, keep=3)
 
 
 def _write_silver(publications, series_name: str) -> int:
@@ -123,6 +152,8 @@ def _write_silver(publications, series_name: str) -> int:
                     event_year=pub_data.get('event_year'),
                     event_month=pub_data.get('event_month'),
                     event_date_confidence=pub_data.get('event_date_confidence'),
+                    event_name=pub_data.get('event_name'),
+                    event_location=pub_data.get('event_location'),
                     fetched_at=(
                         datetime.fromisoformat(pub_data['fetched_at'])
                         if pub_data.get('fetched_at') else _utcnow()

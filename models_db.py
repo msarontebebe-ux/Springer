@@ -57,6 +57,8 @@ class ScrapedPublication:
     event_year: Opt[int] = None
     event_month: Opt[int] = None
     event_date_confidence: Opt[str] = None
+    event_name: Opt[str] = None
+    event_location: Opt[str] = None
     fetched_at: str = field(default_factory=lambda: datetime.now().isoformat())
 
     def to_dict(self):
@@ -148,6 +150,8 @@ class Publication(Base):
     event_year            = Column(Integer, index=True)
     event_month           = Column(Integer)
     event_date_confidence = Column(String(20))   # high / medium / low
+    event_name            = Column(String(255))  # e.g. "ECCV 2024"
+    event_location        = Column(String(255))  # e.g. "Milan, Italy"
 
     fetched_at = Column(DateTime, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -171,6 +175,8 @@ class Publication(Base):
             'event_year':            self.event_year,
             'event_month':           self.event_month,
             'event_date_confidence': self.event_date_confidence,
+            'event_name':            self.event_name,
+            'event_location':        self.event_location,
             'authors':               [{'name': a.name} for a in self.authors],
             'fetched_at':            self.fetched_at.isoformat() if self.fetched_at else None,
         }
